@@ -1,0 +1,48 @@
+#!/bin/bash
+
+apt update -y
+apt install jq -y
+
+
+
+PAT=
+URL=github.tangunsoft.com
+ENT=tangunsoft-partner-demo
+
+
+IDS=$(curl -L \
+  -H "Accept: application/vnd.github+json" \
+  -H "Authorization: Bearer $PAT" \
+  https://$URL/api/v3/enterprises/$ENT/actions/runners | \
+    jq -r '.runners[] | select(.os == "Linux" and .status == "offline") | .id')
+ 
+for ID in $IDS; do
+    echo "Deleting runner ID $ID..."
+    curl -L \
+  -X DELETE \
+  -H "Accept: application/vnd.github+json" \
+  -H "Authorization: Bearer $PAT" \
+https://$URL/api/v3/enterprises/$ENT/actions/runners/${ID}
+done
+
+
+
+mkdir actions-runner && cd actions-runner
+
+curl -O -L https://github.com/actions/runner/releases/download/v2.296.2/actions-runner-linux-x64-2.296.2.tar.gz
+tar xzf ./actions-runner-linux-x64-2.296.2.tar.gz
+
+
+
+
+./bin/installdependencies.sh
+
+export RUNNER_ALLOW_RUNASROOT=true
+
+token=$(curl -s -XPOST \
+    -H "authorization: token $PAT" \
+    https://$URL/api/v3/enterprises/$ENT/actions/runners/registration-token \
+    | jq -r .token)
+    
+./config.sh --url https://$URL/enterprises/$ENT --token $token --name "test$(date "+%m%d%H%M")" --work _work --labels test --runnergroup Default
+./run.sh
